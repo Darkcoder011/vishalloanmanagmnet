@@ -168,16 +168,16 @@ const Loans = () => {
       
       // Input validation
       if (isNaN(amount) || amount <= 0) {
-        throw new Error('Please enter a valid amount greater than 0');
+        throw new Error('कृपया 0 पेक्षा जास्त रक्कम टाका');
       }
       if (!transactionCategory) {
-        throw new Error('Please select a transaction category');
+        throw new Error('कृपया व्यवहार प्रकार निवडा');
       }
       if (!selectedLoan || !selectedLoan.id) {
-        throw new Error('No loan selected');
+        throw new Error('कर्ज निवडलेले नाही');
       }
 
-      // Get current loan data
+      // Get current loan data with safe defaults
       const currentValues = {
         loanAmount: Number(selectedLoan.loanAmount || 0),
         remainingAmount: Number(selectedLoan.remainingAmount || 0),
@@ -189,13 +189,12 @@ const Loans = () => {
       };
 
       // Initialize updates with current values
-      const updates = {
-        ...currentValues
-      };
+      const updates = { ...currentValues };
 
       // Process transaction based on type and category
       switch (transactionCategory) {
         case 'initialDeposit':
+          // Initial deposit only affects initialDeposit field
           if (transactionType === 'credit') {
             updates.initialDeposit = Number((currentValues.initialDeposit + amount).toFixed(2));
           } else {
@@ -204,6 +203,7 @@ const Loans = () => {
           break;
 
         case 'monthlySavings':
+          // Monthly savings only affects monthlySavings field
           if (transactionType === 'credit') {
             updates.monthlySavings = Number((currentValues.monthlySavings + amount).toFixed(2));
           } else {
@@ -211,17 +211,43 @@ const Loans = () => {
           }
           break;
 
+        case 'installment':
+          // Installment payments affect remainingAmount, totalPaid, and installmentsPaid
+          if (transactionType === 'credit') {
+            // When paying an installment
+            if (amount > currentValues.remainingAmount) {
+              throw new Error('हप्त्याची रक्कम बाकी रकमेपेक्षा जास्त आहे');
+            }
+            updates.totalPaid = Number((currentValues.totalPaid + amount).toFixed(2));
+            updates.remainingAmount = Number((currentValues.remainingAmount - amount).toFixed(2));
+            updates.installmentsPaid = currentValues.installmentsPaid + 1;
+          } else {
+            // When reversing an installment payment
+            if (amount > currentValues.totalPaid) {
+              throw new Error('परत करण्याची रक्कम एकूण भरलेल्या रकमेपेक्षा जास्त आहे');
+            }
+            updates.totalPaid = Number((currentValues.totalPaid - amount).toFixed(2));
+            updates.remainingAmount = Number((currentValues.remainingAmount + amount).toFixed(2));
+            updates.installmentsPaid = Math.max(currentValues.installmentsPaid - 1, 0);
+          }
+          break;
+
         case 'loanAmount':
+          // Loan amount modifications affect both loanAmount and remainingAmount
           if (transactionType === 'credit') {
             updates.loanAmount = Number((currentValues.loanAmount + amount).toFixed(2));
             updates.remainingAmount = Number((currentValues.remainingAmount + amount).toFixed(2));
           } else {
-            updates.loanAmount = Number(Math.max(currentValues.loanAmount - amount, 0).toFixed(2));
-            updates.remainingAmount = Number(Math.max(currentValues.remainingAmount - amount, 0).toFixed(2));
+            if (amount > currentValues.loanAmount) {
+              throw new Error('कमी करण्याची रक्कम कर्ज रकमेपेक्षा जास्त आहे');
+            }
+            updates.loanAmount = Number((currentValues.loanAmount - amount).toFixed(2));
+            updates.remainingAmount = Number((currentValues.remainingAmount - amount).toFixed(2));
           }
           break;
 
         case 'interestRate':
+          // Interest rate only affects interestRate field
           if (transactionType === 'credit') {
             updates.interestRate = Number((currentValues.interestRate + amount).toFixed(2));
           } else {
@@ -229,30 +255,84 @@ const Loans = () => {
           }
           break;
 
-        case 'installment':
-          if (transactionType === 'credit') {
-            updates.totalPaid = Number((currentValues.totalPaid + amount).toFixed(2));
-            updates.remainingAmount = Number(Math.max(currentValues.remainingAmount - amount, 0).toFixed(2));
-            updates.installmentsPaid = currentValues.installmentsPaid + 1;
-          } else {
-            updates.totalPaid = Number(Math.max(currentValues.totalPaid - amount, 0).toFixed(2));
-            updates.remainingAmount = Number((currentValues.remainingAmount + amount).toFixed(2));
-            updates.installmentsPaid = Math.max(currentValues.installmentsPaid - 1, 0);
-          }
-          break;
-
         default:
-          throw new Error('Invalid transaction category');
+          throw new Error('अवैध व्यवहार प्रकार');
       }
 
-      // Create transaction record
+      // Helper function to safely get numeric values
+      const safeGetNumber = (value) => {
+        return typeof value === 'number' ? Number(value.toFixed(2)) : 0;
+      };
+
+      // Create transaction record with proper descriptions
+      const getTransactionDescription = (type, category, amount) => {
+        const operation = type === 'credit' ? 'जमा' : 'नावे';
+        const formattedAmount = amount.toLocaleString('en-IN', { 
+          style: 'currency', 
+          currency: 'INR' 
+        });
+        
+        switch (category) {
+          case 'installment':
+            return `हप्ता ${operation} - ${formattedAmount}`;
+          case 'initialDeposit':
+            return `प्रारंभिक ठेव ${operation} - ${formattedAmount}`;
+          case 'monthlySavings':
+            return `मासिक बचत ${operation} - ${formattedAmount}`;
+          case 'loanAmount':
+            return `कर्ज रक्कम ${operation} - ${formattedAmount}`;
+          case 'interestRate':
+            return `व्याज दर ${operation} - ${amount}%`;
+          default:
+            return `${operation} - ${formattedAmount}`;
+        }
+      };
+
+      // Get the previous and new values safely
+      const getPreviousValue = (category) => {
+        switch (category) {
+          case 'installment':
+            return safeGetNumber(currentValues.totalPaid);
+          case 'initialDeposit':
+            return safeGetNumber(currentValues.initialDeposit);
+          case 'monthlySavings':
+            return safeGetNumber(currentValues.monthlySavings);
+          case 'loanAmount':
+            return safeGetNumber(currentValues.loanAmount);
+          case 'interestRate':
+            return safeGetNumber(currentValues.interestRate);
+          default:
+            return 0;
+        }
+      };
+
+      const getNewValue = (category) => {
+        switch (category) {
+          case 'installment':
+            return safeGetNumber(updates.totalPaid);
+          case 'initialDeposit':
+            return safeGetNumber(updates.initialDeposit);
+          case 'monthlySavings':
+            return safeGetNumber(updates.monthlySavings);
+          case 'loanAmount':
+            return safeGetNumber(updates.loanAmount);
+          case 'interestRate':
+            return safeGetNumber(updates.interestRate);
+          default:
+            return 0;
+        }
+      };
+
       const transactionRecord = {
         type: transactionType,
         category: transactionCategory,
         amount: Number(amount.toFixed(2)),
         date: new Date().toISOString(),
-        remainingAmount: updates.remainingAmount,
-        totalPaid: updates.totalPaid
+        remainingAmount: safeGetNumber(updates.remainingAmount),
+        totalPaid: safeGetNumber(updates.totalPaid),
+        previousValue: getPreviousValue(transactionCategory),
+        newValue: getNewValue(transactionCategory),
+        description: getTransactionDescription(transactionType, transactionCategory, amount)
       };
 
       // Update loan and add transaction using firebaseService
@@ -405,7 +485,7 @@ const Loans = () => {
                   <TableCell>₹{loan.initialDeposit?.toLocaleString() || 0}</TableCell>
                   <TableCell>₹{loan.monthlySavings?.toLocaleString() || 0}</TableCell>
                   <TableCell>₹{loan.loanAmount?.toLocaleString() || 0}</TableCell>
-                  <TableCell>{loan.interestRate || 0}%</TableCell>
+                  <TableCell>₹{loan.interestRate || 0}</TableCell>
                   <TableCell>₹{loan.installment?.toLocaleString() || 0}</TableCell>
                   <TableCell>₹{loan.remainingAmount?.toLocaleString() || 0}</TableCell>
                   <TableCell>

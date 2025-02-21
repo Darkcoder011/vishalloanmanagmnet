@@ -252,18 +252,22 @@ export const listenToPayments = (loanId, callback) => {
 
 export const addPayment = async (memberId, paymentData) => {
   try {
-    console.log('Adding payment:', memberId, paymentData);
-    const transactionsRef = ref(db, `transactions/${memberId}`);
-    const newTransactionRef = await push(transactionsRef, {
-      ...paymentData,
-      amount: parseFloat(paymentData.amount) || 0,
-      createdAt: new Date().toISOString()
-    });
-
-    return {
-      id: newTransactionRef.key,
-      ...paymentData
+    // Validate payment data before pushing to Firebase
+    const validatedPayment = {
+      type: paymentData.type || 'credit',
+      category: paymentData.category || 'unknown',
+      amount: Number(paymentData.amount || 0).toFixed(2),
+      date: paymentData.date || new Date().toISOString(),
+      remainingAmount: Number(paymentData.remainingAmount || 0).toFixed(2),
+      totalPaid: Number(paymentData.totalPaid || 0).toFixed(2),
+      previousValue: Number(paymentData.previousValue || 0).toFixed(2),
+      newValue: Number(paymentData.newValue || 0).toFixed(2),
+      description: paymentData.description || '',
     };
+
+    const transactionsRef = ref(db, `members/${memberId}/transactions`);
+    await push(transactionsRef, validatedPayment);
+    return true;
   } catch (error) {
     console.error('Error adding payment:', error);
     throw error;

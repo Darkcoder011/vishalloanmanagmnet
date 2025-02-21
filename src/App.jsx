@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -43,7 +43,7 @@ function App() {
           </Route>
 
           {/* Redirect any unknown routes to dashboard */}
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </ThemeProvider>
