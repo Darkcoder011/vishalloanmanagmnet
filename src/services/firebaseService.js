@@ -252,22 +252,36 @@ export const listenToPayments = (loanId, callback) => {
 
 export const addPayment = async (memberId, paymentData) => {
   try {
-    // Validate payment data before pushing to Firebase
-    const validatedPayment = {
-      type: paymentData.type || 'credit',
-      category: paymentData.category || 'unknown',
-      amount: Number(paymentData.amount || 0).toFixed(2),
-      date: paymentData.date || new Date().toISOString(),
-      remainingAmount: Number(paymentData.remainingAmount || 0).toFixed(2),
-      totalPaid: Number(paymentData.totalPaid || 0).toFixed(2),
-      previousValue: Number(paymentData.previousValue || 0).toFixed(2),
-      newValue: Number(paymentData.newValue || 0).toFixed(2),
-      description: paymentData.description || '',
+    console.log('Adding payment for member:', memberId, paymentData);
+    
+    // Ensure we have a transactions node for this member
+    const transactionsRef = ref(db, `transactions/${memberId}`);
+    
+    // Add timestamp if not present
+    const enrichedPaymentData = {
+      ...paymentData,
+      timestamp: Date.now(),
+      date: paymentData.date || new Date().toISOString()
     };
 
-    const transactionsRef = ref(db, `members/${memberId}/transactions`);
-    await push(transactionsRef, validatedPayment);
-    return true;
+    // Create a new transaction record
+    const newTransactionRef = await push(transactionsRef, enrichedPaymentData);
+    
+    // Also update the member's transaction count and last transaction
+    const memberRef = ref(db, `members/${memberId}`);
+    const memberSnapshot = await get(memberRef);
+    const memberData = memberSnapshot.val() || {};
+    
+    await update(memberRef, {
+      lastTransaction: enrichedPaymentData,
+      transactionCount: (memberData.transactionCount || 0) + 1,
+      updatedAt: new Date().toISOString()
+    });
+
+    return {
+      id: newTransactionRef.key,
+      ...enrichedPaymentData
+    };
   } catch (error) {
     console.error('Error adding payment:', error);
     throw error;

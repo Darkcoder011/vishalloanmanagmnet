@@ -35,11 +35,11 @@ const TransactionHistory = ({ open, onClose, memberId, memberName }) => {
   });
 
   useEffect(() => {
-    if (!memberId) return;
+    if (!memberId || !open) return;
 
     const db = getDatabase();
     const transactionsRef = ref(db, `transactions/${memberId}`);
-    const transactionsQuery = query(transactionsRef, orderByChild('date'));
+    const transactionsQuery = query(transactionsRef, orderByChild('timestamp'));
 
     const unsubscribe = onValue(transactionsQuery, (snapshot) => {
       const data = snapshot.val();
@@ -48,7 +48,13 @@ const TransactionHistory = ({ open, onClose, memberId, memberName }) => {
           id,
           ...transaction,
           date: new Date(transaction.date),
-        })).sort((a, b) => b.date - a.date); // Sort by date descending
+          amount: Number(transaction.amount),
+          previousValue: Number(transaction.previousValue || 0),
+          newValue: Number(transaction.newValue || 0),
+          remainingAmount: Number(transaction.remainingAmount || 0),
+          totalPaid: Number(transaction.totalPaid || 0)
+        })).sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp descending
+        
         console.log('Loaded transactions:', transactionsArray);
         setTransactions(transactionsArray);
         setFilteredTransactions(transactionsArray);
@@ -59,7 +65,7 @@ const TransactionHistory = ({ open, onClose, memberId, memberName }) => {
     });
 
     return () => unsubscribe();
-  }, [memberId]);
+  }, [memberId, open]);
 
   useEffect(() => {
     let filtered = [...transactions];
@@ -191,7 +197,7 @@ const TransactionHistory = ({ open, onClose, memberId, memberName }) => {
           </Grid>
         </Grid>
 
-        <TableContainer component={Paper}>
+        <TableContainer component={Paper} sx={{ mt: 2 }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -199,7 +205,9 @@ const TransactionHistory = ({ open, onClose, memberId, memberName }) => {
                 <TableCell>प्रकार</TableCell>
                 <TableCell>श्रेणी</TableCell>
                 <TableCell align="right">रक्कम</TableCell>
-                <TableCell align="right">बाकी रक्कम</TableCell>
+                <TableCell align="right">पूर्व मूल्य</TableCell>
+                <TableCell align="right">नवीन मूल्य</TableCell>
+                <TableCell>वर्णन</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -207,35 +215,49 @@ const TransactionHistory = ({ open, onClose, memberId, memberName }) => {
                 <TableRow key={transaction.id}>
                   <TableCell>{formatDate(transaction.date)}</TableCell>
                   <TableCell>
-                    <Chip 
-                      label={transaction.type === 'credit' ? 'जमा' : 'वजा'}
-                      size="small"
+                    <Chip
+                      label={transaction.type === 'credit' ? 'जमा' : 'नावे'}
                       color={getTransactionTypeColor(transaction.type)}
+                      size="small"
                     />
                   </TableCell>
                   <TableCell>{getCategoryLabel(transaction.category)}</TableCell>
                   <TableCell align="right">₹{transaction.amount.toLocaleString()}</TableCell>
-                  <TableCell align="right">₹{transaction.remainingAmount.toLocaleString()}</TableCell>
+                  <TableCell align="right">₹{transaction.previousValue.toLocaleString()}</TableCell>
+                  <TableCell align="right">₹{transaction.newValue.toLocaleString()}</TableCell>
+                  <TableCell>{transaction.description}</TableCell>
                 </TableRow>
               ))}
+              {filteredTransactions.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} align="center">
+                    कोणतेही व्यवहार सापडले नाहीत
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
 
         <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-          <Typography variant="subtitle2" gutterBottom>सारांश</Typography>
+          <Typography variant="subtitle1" gutterBottom>
+            सारांश
+          </Typography>
           <Grid container spacing={2}>
             <Grid item xs={4}>
-              <Typography variant="body2" color="text.secondary">एकूण जमा</Typography>
-              <Typography variant="h6" color="success.main">₹{stats.totalCredit.toLocaleString()}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                एकूण जमा: ₹{stats.totalCredit.toLocaleString()}
+              </Typography>
             </Grid>
             <Grid item xs={4}>
-              <Typography variant="body2" color="text.secondary">एकूण वजा</Typography>
-              <Typography variant="h6" color="error.main">₹{stats.totalDebit.toLocaleString()}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                एकूण नावे: ₹{stats.totalDebit.toLocaleString()}
+              </Typography>
             </Grid>
             <Grid item xs={4}>
-              <Typography variant="body2" color="text.secondary">एकूण व्यवहार</Typography>
-              <Typography variant="h6">{stats.totalTransactions}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                एकूण व्यवहार: {stats.totalTransactions}
+              </Typography>
             </Grid>
           </Grid>
         </Box>
